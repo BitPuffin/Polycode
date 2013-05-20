@@ -20,3 +20,11 @@
  THE SOFTWARE.
  */
  
+#pragma once
+
+#include "PolycodeEditor.h"
+#include <Polycode.h>
+#include <PolycodeUI.h>
+#include "PolycodeProps.h"
+
+
