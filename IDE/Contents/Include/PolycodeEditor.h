@@ -29,6 +29,17 @@
 
 #define MAX_EDITOR_UNDO_ACTIONS	40
 
+#if defined(__APPLE__) && defined(__MACH__)
+	#define COPYMOD_1 KEY_RALT
+	#define COPYMOD_2 KEY_LALT
+#elif defined _WINDOWS
+	#define COPYMOD_1 KEY_RCTRL
+	#define COPYMOD_2 KEY_LCTRL
+#else
+	#define COPYMOD_1 KEY_RCTRL
+	#define COPYMOD_2 KEY_LCTRL
+#endif
+
 using namespace Polycode;
 
 class PolycodeEditorActionData {
