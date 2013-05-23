@@ -27,4 +27,6 @@
 #include <PolycodeUI.h>
 #include "PolycodeProps.h"
 
+using namespace Polycode;
+
 
