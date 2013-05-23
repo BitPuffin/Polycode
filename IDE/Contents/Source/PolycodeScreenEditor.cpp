@@ -21,268 +21,8 @@
  */
  
 #include "PolycodeScreenEditor.h"
-#include "PolycodeFrame.h"
 
-extern UIColorPicker *globalColorPicker;
-extern PolycodeFrame *globalFrame;
-extern UIGlobalMenu *globalMenu;
-
-PolycodeScreenEditorActionDataEntry::PolycodeScreenEditorActionDataEntry(ScreenEntity *entity) {
-	this->entity = entity;
-	this->parentEntity = (ScreenEntity*)entity->getParentEntity();
-}
-
-PolycodeScreenEditorActionDataEntry::PolycodeScreenEditorActionDataEntry(Vector3 vec3, Number number) {
-	this->vec3 = vec3;
-	this->number = number;	
-}
-
-PolycodeScreenEditorActionDataEntry::PolycodeScreenEditorActionDataEntry(Vector3 vec3) {
-	this->vec3 = vec3;
-}
-
-PolycodeScreenEditorActionDataEntry::PolycodeScreenEditorActionDataEntry(Number number) {
-	this->number = number;
-}
-
-ScreenEntityNameDisplay::ScreenEntityNameDisplay(ScreenEntity *targetEntity) : ScreenEntity() {
-	label = new ScreenLabel(targetEntity->id, 10, "mono");
-	label->setColor(1.0, 1.0, 0.0, 1.0);
-	label->setPosition(10, -20);
-	
-	tagsLabel = new ScreenLabel(targetEntity->id, 10, "mono");
-	tagsLabel->setColor(1.0, 0.0, 1.0, 1.0);
-	tagsLabel->setPosition(10, 20);
-
-	
-	addChild(label);
-	addChild(tagsLabel);
-	
-	editorOnly = true;
-	this->targetEntity = targetEntity;
-	
-}
-
-void ScreenEntityNameDisplay::Update() {
-	label->setText(targetEntity->id);
-	
-	String tagString = "";
-	for(int i=0; i < targetEntity->getNumTags(); i++) {
-		if(i != 0) {
-			tagString += ",";
-		}
-		tagString += targetEntity->getTagAtIndex(i);
-	}
-	tagsLabel->setText(tagString);
-	
-}
-
-ScreenEntityNameDisplay::~ScreenEntityNameDisplay() {
-
-}
-
-EntityTreeView::EntityTreeView(Entity *rootEntity) : UIElement() {
-
-	this->rootEntity = rootEntity;
-
-	targetLayer = NULL;
-
-	bg = new ScreenShape(ScreenShape::SHAPE_RECT,10,10);
-	addChild(bg);
-	bg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
-	bg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
-	bg->blockMouseInput = true;
-	bg->processInputEvents = true;
-	
-	headerBg = new ScreenShape(ScreenShape::SHAPE_RECT,10,10);
-	addChild(headerBg);
-	headerBg->setPositionMode(ScreenEntity::POSITION_TOPLEFT);
-	headerBg->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderBgColor"));
-	
-	ScreenLabel *label = new ScreenLabel("TREE VIEW", 18, "section", Label::ANTIALIAS_FULL);
-	label->color.setColorHexFromString(CoreServices::getInstance()->getConfig()->getStringValue("Polycode", "uiHeaderFontColor"));
-	addChild(label);
-	label->setPosition(10, 3);
-	
-	treeContainer = new UITreeContainer("Images/entity_icon.png", L"Entity", 200, 555);
-	treeContainer->getRootNode()->toggleCollapsed();
-	treeContainer->getRootNode()->addEventListener(this, UITreeEvent::SELECTED_EVENT);
-	treeContainer->addEventListener(this, InputEvent::EVENT_MOUSEDOWN);
-	treeContainer->setPosition(0, 30);
-	
-	EntityBrowserData *data = new EntityBrowserData();
-	data->entity = rootEntity;
-	treeContainer->getRootNode()->setUserData((void*) data)	;	
-	
-	addChild(treeContainer);	
-	
-	newLayerButton = new UIImageButton("Images/new_layer.png");
-	addChild(newLayerButton);
-
-	targetLayerButton = new UIImageButton("Images/target_layer.png");
-	addChild(targetLayerButton);
-
-	
-	dontSendSelectionEvent = false;
-	
-}
-
-void EntityTreeView::setRootEntity(ScreenEntity *entity) {
-	rootEntity = entity;
-	EntityBrowserData *oldData = (EntityBrowserData*)treeContainer->getRootNode()->getUserData();
-	if(oldData)
-		delete oldData;
-	
-	EntityBrowserData *data = new EntityBrowserData();
-	data->entity = rootEntity;
-	treeContainer->getRootNode()->setUserData((void*) data)	;	
-}
-
-void EntityTreeView::syncNodeToEntity(UITree *node, Entity *entity) {
-
-	// remove non existing and set proper ids, 
-	
-	std::vector<UITree*> nodesToRemove;
-
-	for(int i=0; i < node->getNumTreeChildren(); i++) {
-		UITree *child = node->getTreeChild(i);
-		
-		bool hasChild = false;
-		for(int j=0; j < entity->getNumChildren(); j++) {
-			if(!entity->getChildAtIndex(j)->editorOnly) {
-			if(((EntityBrowserData*)child->getUserData())->entity == entity->getChildAtIndex(j)) {
-				hasChild = true;
-				
-				String entityName = entity->getChildAtIndex(j)->id;
-				if(entity->getChildAtIndex(j) == targetLayer) {
-					entityName += " (current)";
-				}
-				
-				if(child->getLabelText() != entityName) {
-					child->setLabelText(entityName);
-				}
-				
-				if(entity->getChildAtIndex(j) == selectedEntity) {
-					dontSendSelectionEvent = true;				
-					child->setSelected();
-				}
-				
-			}
-			}
-		}
-
-		if(!hasChild) {
-			nodesToRemove.push_back(child);
-		}
-	}
-	
-	for(int i=0; i < nodesToRemove.size(); i++) {
-		node->removeTreeChild(nodesToRemove[i]);
-	}
-	
-	std::vector<Entity*> entitiesToAdd;
-	
-	for(int j=0; j < entity->getNumChildren(); j++) {	
-		if(!entity->getChildAtIndex(j)->editorOnly) {	
-		bool hasEntity = false;			
-		for(int i=0; i < node->getNumTreeChildren(); i++) {
-			UITree *child = node->getTreeChild(i);
-			if(((EntityBrowserData*)child->getUserData())->entity == entity->getChildAtIndex(j)) {
-				hasEntity = true;
-			}
-		}
-		
-		if(!hasEntity) {
-			entitiesToAdd.push_back(entity->getChildAtIndex(j));
-		}
-		}
-	}
-	
-	for(int i=0; i < entitiesToAdd.size(); i++) {
-	
-		String entityName = entitiesToAdd[i]->id;
-		if(entitiesToAdd[i] == targetLayer) {
-			entityName += " (current)";
-		}
-	
-		UITree *newNode = node->addTreeChild("Images/entity_icon.png", entityName);
-		EntityBrowserData *data = new EntityBrowserData();
-		data->entity = entitiesToAdd[i];		
-		newNode->setUserData((void*)data);				
-		
-		if(entitiesToAdd[i] == selectedEntity) {
-			dontSendSelectionEvent = true;
-			newNode->setSelected();
-		}
-	}
-	
-	for(int i=0; i < node->getNumTreeChildren(); i++) {
-		UITree *child = node->getTreeChild(i);
-		syncNodeToEntity(child, ((EntityBrowserData*)child->getUserData())->entity);
-	}
-}
-
-void EntityTreeView::Refresh() {
-	syncNodeToEntity(treeContainer->getRootNode(), rootEntity);
-}
-
-void EntityTreeView::handleEvent(Event *event) {
-	
-	if(event->getDispatcher() == treeContainer->getRootNode()) {
-		if(event->getEventCode() == UITreeEvent::SELECTED_EVENT){ 			
-			if(!dontSendSelectionEvent) {
-				EntityBrowserData *data = (EntityBrowserData *)treeContainer->getRootNode()->getSelectedNode()->getUserData();
-				selectedEntity =  data->entity;
-				dispatchEvent(new Event(), Event::CHANGE_EVENT);
-			}
-			dontSendSelectionEvent = false;
-		}
-	}
-//
-//	if(event->getEventCode() == Event::CHANGE_EVENT && event->getEventType() == "Event") {
-//		for(int i=0; i < layers.size(); i++) {
-//			if(event->getDispatcher() == layers[i]) {
-//				currentLayer->setSelected(false);
-//				layers[i]->setSelected(true);
-//				currentLayer = layers[i];				
-//				dispatchEvent(new Event(), Event::CHANGE_EVENT);
-//			}
-//		}
-//	}
-/*
-	if(event->getDispatcher() == treeContainer->getRootNode()) {
-		if(event->getEventCode() == UITreeEvent::SELECTED_EVENT){ 
-			selectedNode = treeContainer->getRootNode()->getSelectedNode();			
-			MaterialBrowserData *data = (MaterialBrowserData *)selectedNode->getUserData();
-			selectedData =  data;
-			dispatchEvent(new Event(), Event::CHANGE_EVENT);
-		}
-	}
-	*/
-	ScreenEntity::handleEvent(event);
-}
-
-
-EntityTreeView::~EntityTreeView() {
-
-}
-
-
-void EntityTreeView::Resize(Number width, Number height) {
-	setWidth(width);
-	setHeight(height);
-	
-	bg->setShapeSize(width, height);
-	headerBg->setShapeSize(width, 30);
-	
-	newLayerButton->setPosition(width- 30, 3);		
-	targetLayerButton->setPosition(width- 55, 3);	
-		
-	treeContainer->Resize(width, height-30);
-}
-
-
-PolycodeScreenEditorMain::PolycodeScreenEditorMain(PolycodeEditor *editor) {
+PolycodeScreenEditorMain::PolycodeScreenEditorMain(PolycodeEditor *editor) : PolycodeEntityEditorMain(editor) {
 	this->editor = editor;
 	firstMove = false;
 
@@ -841,7 +581,7 @@ PolycodeScreenEditorMain::~PolycodeScreenEditorMain() {
 }
 
 void PolycodeScreenEditorMain::doAction(String actionName, PolycodeEditorActionData *data) {
-	PolycodeScreenEditorActionData *screenData = (PolycodeScreenEditorActionData*)data;
+	PolycodeEntityEditorActionData *screenData = (PolycodeEntityEditorActionData*)data;
 	if(actionName == "move") {
 		for(int i=0; i < selectedEntities.size(); i++) {
 			selectedEntities[i]->position = screenData->entries[i].vec3;
@@ -1097,21 +837,21 @@ void PolycodeScreenEditorMain::handleMouseUp(Vector2 position) {
 			if(trans.length() > 0) {
 		
 			if(moving) {
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				for(int i=0; i < selectedEntities.size(); i++) {
-					data->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]->position));
+					data->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]->position));
 				}
 				editor->didAction("move", beforeData, data);
 			} else if(scalingX || scalingY) {
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				for(int i=0; i < selectedEntities.size(); i++) {
-					data->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]->scale));
+					data->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]->scale));
 				}
 				editor->didAction("scale", beforeData, data);
 			} else if(rotating) {
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				for(int i=0; i < selectedEntities.size(); i++) {
-					data->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]->position, selectedEntities[i]->getRotation()));
+					data->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]->position, selectedEntities[i]->getRotation()));
 				}
 				editor->didAction("rotate", beforeData, data);
 			}
@@ -1419,11 +1159,11 @@ void PolycodeScreenEditorMain::handleMouseDown(Vector2 position) {
 					treeView->Refresh();		
 				}
 				
-				PolycodeScreenEditorActionData *beforeData = new PolycodeScreenEditorActionData();
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *beforeData = new PolycodeEntityEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				data->reverse = false;
-				data->entry = PolycodeScreenEditorActionDataEntry(placingLabel);
-				beforeData->entry = PolycodeScreenEditorActionDataEntry(placingLabel);
+				data->entry = PolycodeEntityEditorDataEntry(placingLabel);
+				beforeData->entry = PolycodeEntityEditorDataEntry(placingLabel);
 				editor->didAction("create_entity", beforeData, data);
 		}
 		break;		
@@ -1445,11 +1185,11 @@ void PolycodeScreenEditorMain::handleMouseDown(Vector2 position) {
 					treeView->Refresh();		
 				}	
 				
-				PolycodeScreenEditorActionData *beforeData = new PolycodeScreenEditorActionData();
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *beforeData = new PolycodeEntityEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				data->reverse = false;
-				data->entry = PolycodeScreenEditorActionDataEntry(placingImage);
-				beforeData->entry = PolycodeScreenEditorActionDataEntry(placingImage);
+				data->entry = PolycodeEntityEditorDataEntry(placingImage);
+				beforeData->entry = PolycodeEntityEditorDataEntry(placingImage);
 				editor->didAction("create_entity", beforeData, data);
 											
 		}
@@ -1472,11 +1212,11 @@ void PolycodeScreenEditorMain::handleMouseDown(Vector2 position) {
 					treeView->Refresh();		
 				}
 				
-				PolycodeScreenEditorActionData *beforeData = new PolycodeScreenEditorActionData();
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *beforeData = new PolycodeEntityEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				data->reverse = false;
-				data->entry = PolycodeScreenEditorActionDataEntry(placingShape);
-				beforeData->entry = PolycodeScreenEditorActionDataEntry(placingShape);				
+				data->entry = PolycodeEntityEditorDataEntry(placingShape);
+				beforeData->entry = PolycodeEntityEditorDataEntry(placingShape);				
 				editor->didAction("create_entity", beforeData, data);
 															
 		}
@@ -1535,11 +1275,11 @@ void PolycodeScreenEditorMain::handleMouseDown(Vector2 position) {
 					treeView->Refresh();		
 				}
 				
-				PolycodeScreenEditorActionData *beforeData = new PolycodeScreenEditorActionData();
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *beforeData = new PolycodeEntityEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				data->reverse = false;
-				data->entry = PolycodeScreenEditorActionDataEntry(placingEmitter);
-				beforeData->entry = PolycodeScreenEditorActionDataEntry(placingEmitter);				
+				data->entry = PolycodeEntityEditorDataEntry(placingEmitter);
+				beforeData->entry = PolycodeEntityEditorDataEntry(placingEmitter);				
 				editor->didAction("create_entity", beforeData, data);
 																										
 		}
@@ -1567,11 +1307,11 @@ void PolycodeScreenEditorMain::handleMouseDown(Vector2 position) {
 					treeView->Refresh();		
 				}
 				
-				PolycodeScreenEditorActionData *beforeData = new PolycodeScreenEditorActionData();
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *beforeData = new PolycodeEntityEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				data->reverse = false;
-				data->entry = PolycodeScreenEditorActionDataEntry(placingSprite);
-				beforeData->entry = PolycodeScreenEditorActionDataEntry(placingSprite);				
+				data->entry = PolycodeEntityEditorDataEntry(placingSprite);
+				beforeData->entry = PolycodeEntityEditorDataEntry(placingSprite);				
 				editor->didAction("create_entity", beforeData, data);
 																										
 		}
@@ -1594,11 +1334,11 @@ void PolycodeScreenEditorMain::handleMouseDown(Vector2 position) {
 					treeView->Refresh();		
 				}
 
-				PolycodeScreenEditorActionData *beforeData = new PolycodeScreenEditorActionData();
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *beforeData = new PolycodeEntityEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				data->reverse = false;
-				data->entry = PolycodeScreenEditorActionDataEntry(placingInstance);
-				beforeData->entry = PolycodeScreenEditorActionDataEntry(placingInstance);				
+				data->entry = PolycodeEntityEditorDataEntry(placingInstance);
+				beforeData->entry = PolycodeEntityEditorDataEntry(placingInstance);				
 				editor->didAction("create_entity", beforeData, data);
 															
 		}
@@ -1624,11 +1364,11 @@ void PolycodeScreenEditorMain::handleMouseDown(Vector2 position) {
 					treeView->Refresh();		
 				}
 
-				PolycodeScreenEditorActionData *beforeData = new PolycodeScreenEditorActionData();
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *beforeData = new PolycodeEntityEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				data->reverse = false;
-				data->entry = PolycodeScreenEditorActionDataEntry(placingEntity);
-				beforeData->entry = PolycodeScreenEditorActionDataEntry(placingEntity);				
+				data->entry = PolycodeEntityEditorDataEntry(placingEntity);
+				beforeData->entry = PolycodeEntityEditorDataEntry(placingEntity);				
 				editor->didAction("create_entity", beforeData, data);
 				
 								
@@ -1658,11 +1398,11 @@ void PolycodeScreenEditorMain::handleMouseDown(Vector2 position) {
 					treeView->Refresh();		
 				}
 
-				PolycodeScreenEditorActionData *beforeData = new PolycodeScreenEditorActionData();
-				PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+				PolycodeEntityEditorActionData *beforeData = new PolycodeEntityEditorActionData();
+				PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 				data->reverse = false;
-				data->entry = PolycodeScreenEditorActionDataEntry(placingSound);
-				beforeData->entry = PolycodeScreenEditorActionDataEntry(placingSound);				
+				data->entry = PolycodeEntityEditorDataEntry(placingSound);
+				beforeData->entry = PolycodeEntityEditorDataEntry(placingSound);				
 				editor->didAction("create_entity", beforeData, data);
 				
 																				
@@ -1788,9 +1528,9 @@ void PolycodeScreenEditorMain::selectEntity(ScreenEntity *entity, bool doAction)
 	}	
 	
 	if(doAction) {
-		beforeData = new PolycodeScreenEditorActionData();
+		beforeData = new PolycodeEntityEditorActionData();
 		for(int i=0; i < selectedEntities.size(); i++) {
-			beforeData->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]));
+			beforeData->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]));
 		}		
 	}	
 
@@ -1899,9 +1639,9 @@ void PolycodeScreenEditorMain::selectEntity(ScreenEntity *entity, bool doAction)
 	}
 	
 	if(doAction) {
-		PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+		PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 		for(int i=0; i < selectedEntities.size(); i++) {
-			data->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]));
+			data->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]));
 		}			
 		editor->didAction("select", beforeData, data, false);
 	}	
@@ -2058,12 +1798,12 @@ void PolycodeScreenEditorMain::handleEvent(Event *event) {
 				{
 					if(selectedEntities.size() > 0 && baseEntity->hasFocus) {
 							
-						PolycodeScreenEditorActionData *oldData = new PolycodeScreenEditorActionData();
-						PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+						PolycodeEntityEditorActionData *oldData = new PolycodeEntityEditorActionData();
+						PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 						data->reverse = false;
 						for(int i=0; i < selectedEntities.size(); i++) {
-							oldData->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]));
-							data->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]));
+							oldData->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]));
+							data->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]));
 						}			
 					
 						for(int i=0; i < selectedEntities.size(); i++) {
@@ -2117,9 +1857,9 @@ void PolycodeScreenEditorMain::handleEvent(Event *event) {
 			scalingY = true;
 			scalingX = true;			
 			resetSelectedEntityTransforms();
-			beforeData = new PolycodeScreenEditorActionData();
+			beforeData = new PolycodeEntityEditorActionData();
 			for(int i=0; i < selectedEntities.size(); i++) {
-				beforeData->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]->scale));
+				beforeData->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]->scale));
 			}			
 			mouseBase = CoreServices::getInstance()->getCore()->getInput()->getMousePosition();			
 			baseScaleScreenPosition = screenTransform->getScreenPosition();
@@ -2128,9 +1868,9 @@ void PolycodeScreenEditorMain::handleEvent(Event *event) {
 		if(selectedEntities.size() > 0) {
 			scalingY = true;
 			resetSelectedEntityTransforms();
-			beforeData = new PolycodeScreenEditorActionData();			
+			beforeData = new PolycodeEntityEditorActionData();			
 			for(int i=0; i < selectedEntities.size(); i++) {
-				beforeData->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]->scale));
+				beforeData->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]->scale));
 			}						
 			mouseBase = CoreServices::getInstance()->getCore()->getInput()->getMousePosition();			
 		}
@@ -2138,9 +1878,9 @@ void PolycodeScreenEditorMain::handleEvent(Event *event) {
 		if(selectedEntities.size() > 0) {
 			scalingX = true;
 			resetSelectedEntityTransforms();
-			beforeData = new PolycodeScreenEditorActionData();			
+			beforeData = new PolycodeEntityEditorActionData();			
 			for(int i=0; i < selectedEntities.size(); i++) {
-				beforeData->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]->scale));
+				beforeData->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]->scale));
 			}						
 			mouseBase = CoreServices::getInstance()->getCore()->getInput()->getMousePosition();			
 		}
@@ -2150,9 +1890,9 @@ void PolycodeScreenEditorMain::handleEvent(Event *event) {
 			rotating = true;
 			resetSelectedEntityTransforms();
 			mouseBase = CoreServices::getInstance()->getCore()->getInput()->getMousePosition();
-			beforeData = new PolycodeScreenEditorActionData();			
+			beforeData = new PolycodeEntityEditorActionData();			
 			for(int i=0; i < selectedEntities.size(); i++) {
-				beforeData->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]->position, selectedEntities[i]->getRotation()));
+				beforeData->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]->position, selectedEntities[i]->getRotation()));
 			}
 			
 			Vector2 diff = mouseBase - screenTransform->getScreenPosition();
@@ -2312,9 +2052,9 @@ void PolycodeScreenEditorMain::handleEvent(Event *event) {
 							Paste(data, type);
 							destroyClipboardData(data, type);
 						}
-						beforeData = new PolycodeScreenEditorActionData();						
+						beforeData = new PolycodeEntityEditorActionData();						
 						for(int i=0; i < selectedEntities.size(); i++) {
-							beforeData->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]->position));
+							beforeData->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]->position));
 						}															
 					}
 					firstMove = false;					
@@ -2354,9 +2094,9 @@ void PolycodeScreenEditorMain::processEventForEntity(ScreenEntity *childEntity, 
 					selectEntity(childEntity);
 					if(selectedEntities.size() > 0) {
 						moving = true;
-						beforeData = new PolycodeScreenEditorActionData();						
+						beforeData = new PolycodeEntityEditorActionData();						
 						for(int i=0; i < selectedEntities.size(); i++) {
-							beforeData->entries.push_back(PolycodeScreenEditorActionDataEntry(selectedEntities[i]->position));
+							beforeData->entries.push_back(PolycodeEntityEditorDataEntry(selectedEntities[i]->position));
 						}									
 						mouseBase = CoreServices::getInstance()->getCore()->getInput()->getMousePosition();
 					}					
@@ -2467,7 +2207,7 @@ ScreenEntity *PolycodeScreenEditorMain::getCurrentLayer() {
 void PolycodeScreenEditorMain::setCurrentLayer(ScreenEntity *newLayer, bool doAction) {
 
 	if(doAction) {
-		beforeData = new PolycodeScreenEditorActionData();
+		beforeData = new PolycodeEntityEditorActionData();
 		beforeData->entry.entity = currentLayer;
 	}
 
@@ -2480,7 +2220,7 @@ void PolycodeScreenEditorMain::setCurrentLayer(ScreenEntity *newLayer, bool doAc
 	}
 	
 	if(doAction) {
-		PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+		PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 		data->entry.entity = currentLayer;
 		editor->didAction("set_current_layer", beforeData, data, false);
 	}
@@ -2524,7 +2264,7 @@ void PolycodeScreenEditorMain::handleDroppedFile(OSFileEntry file, Number x, Num
 	}
 }
 
-PolycodeScreenEditor::PolycodeScreenEditor() : PolycodeEditor(true){
+PolycodeScreenEditor::PolycodeScreenEditor() : PolycodeEntityEditor(){
 
 	mainSizer = new UIHSizer(100,100,340,false);
 	addChild(mainSizer);	
@@ -2572,7 +2312,7 @@ void PolycodeScreenEditor::destroyClipboardData(void *data, String type) {
 
 String PolycodeScreenEditorMain::Copy(void **data) {
 	if(selectedEntities.size() > 0) {
-		ScreenEntityClipboardData *newData = new ScreenEntityClipboardData();
+		EntityClipboardData *newData = new EntityClipboardData();
 		for(int i=0; i < selectedEntities.size(); i++) {
 			ScreenEntity *clone = (ScreenEntity*)selectedEntities[i]->Clone(true, true);
 			newData->entities.push_back(clone);
@@ -2588,11 +2328,11 @@ void PolycodeScreenEditorMain::Paste(void *data, String clipboardType) {
 	if(clipboardType == "ScreenEntity") {
 		selectEntity(NULL);
 		multiSelect = true;
-		ScreenEntityClipboardData *newData = (ScreenEntityClipboardData*) data;
+		EntityClipboardData *newData = (EntityClipboardData*) data;
 		if(currentLayer) {
 		
-			PolycodeScreenEditorActionData *beforeData = new PolycodeScreenEditorActionData();
-			PolycodeScreenEditorActionData *data = new PolycodeScreenEditorActionData();
+			PolycodeEntityEditorActionData *beforeData = new PolycodeEntityEditorActionData();
+			PolycodeEntityEditorActionData *data = new PolycodeEntityEditorActionData();
 			data->reverse = false;
 	
 			for(int i=0; i < newData->entities.size(); i++) {
@@ -2614,8 +2354,8 @@ void PolycodeScreenEditorMain::Paste(void *data, String clipboardType) {
 				applyEditorProperties(entity);
 				selectEntity(entity, false);
 
-				beforeData->entries.push_back(PolycodeScreenEditorActionDataEntry(entity));				
-				data->entries.push_back(PolycodeScreenEditorActionDataEntry(entity));
+				beforeData->entries.push_back(PolycodeEntityEditorDataEntry(entity));				
+				data->entries.push_back(PolycodeEntityEditorDataEntry(entity));
 				
 			}
 			
@@ -2630,7 +2370,7 @@ void PolycodeScreenEditorMain::Paste(void *data, String clipboardType) {
 
 void PolycodeScreenEditorMain::destroyClipboardData(void *data, String type) {
 	if(type == "ScreenEntity") {
-		ScreenEntityClipboardData *oldData = (ScreenEntityClipboardData*) data;
+		EntityClipboardData *oldData = (EntityClipboardData*) data;
 		for(int i=0; i < oldData->entities.size(); i++) {
 			delete oldData->entities[i];
 		}
@@ -3009,21 +2749,4 @@ void PolycodeScreenEditor::Resize(int x, int y) {
 	PolycodeEditor::Resize(x,y);	
 	mainSizer->Resize(x,y);
 }
-
-PropertiesSizer::PropertiesSizer() : UIElement() {
-	sizer = new UIVSizer(100, 100, 220, true);
-	
-	addChild(sizer);
-}
-
-PropertiesSizer::~PropertiesSizer() {
-
-}
-
-void PropertiesSizer::Resize(Number width, Number height) {
-	sizer->Resize(width, height);
-	UIElement::Resize(width, height);
-}
-
-
 

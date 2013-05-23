@@ -22,108 +22,11 @@
  
 #pragma once
 
-#include "PolycodeEditor.h"
-#include <Polycode.h>
-#include <PolycodeUI.h>
-#include "PolycodeProps.h"
+#include "PolycodeEntityEditor.h"
 
 using namespace Polycode;
 
-#ifdef _WINDOWS
-#define round (int)
-#endif
-
-class EntityBrowserData  {
-	public:
-		Entity *entity;
-};
-
-class PolycodeScreenEditorActionDataEntry {
-	public:
-		PolycodeScreenEditorActionDataEntry(){
-			entity = NULL;
-			parentEntity = NULL;
-		}
-		PolycodeScreenEditorActionDataEntry(Vector3 vec3, Number number);	
-		PolycodeScreenEditorActionDataEntry(Vector3 vec3);
-		PolycodeScreenEditorActionDataEntry(Number number);
-		PolycodeScreenEditorActionDataEntry(ScreenEntity *entity);
-		Vector3 vec3;
-		Number number;
-		ScreenEntity *entity;
-		ScreenEntity *parentEntity;		
-};
-
-class PolycodeScreenEditorActionData : public PolycodeEditorActionData {
-	public:
-		PolycodeScreenEditorActionData() {
-			reverse = true;
-		}
-		virtual ~PolycodeScreenEditorActionData(){}
-		
-		std::vector<PolycodeScreenEditorActionDataEntry> entries;
-		PolycodeScreenEditorActionDataEntry entry;
-		bool reverse;
-};
-
-class EntityTreeView : public UIElement {
-	public:
-		EntityTreeView(Entity *rootEntity);
-		~EntityTreeView();
-		
-		void Resize(Number width, Number height);
-		void handleEvent(Event *event);	
-		
-		void syncNodeToEntity(UITree *node, Entity *entity);
-		
-		void setRootEntity(ScreenEntity *entity);
-		
-		void Refresh();
-
-		Entity *selectedEntity;
-		Entity *targetLayer;
-		
-		UIImageButton *newLayerButton;
-		UIImageButton *targetLayerButton;
-		
-						
-	protected:	
-	
-		Entity *rootEntity;
-			
-		bool dontSendSelectionEvent;
-	
-		UITreeContainer *treeContainer;
-			
-		ScreenShape *headerBg;		
-		ScreenShape *bg;		
-				
-};
-
-class PropertiesSizer : public UIElement {
-	public:
-		PropertiesSizer();
-		~PropertiesSizer();
-		
-		void Resize(Number width, Number height);
-		
-		UIVSizer *sizer;
-};
-
-
-class ScreenEntityNameDisplay : public ScreenEntity {
-	public:
-		ScreenEntityNameDisplay(ScreenEntity *targetEntity);
-		~ScreenEntityNameDisplay();
-		
-		void Update();
-		
-		ScreenLabel *label;
-		ScreenLabel *tagsLabel;		
-		ScreenEntity *targetEntity;
-};
-
-class PolycodeScreenEditorMain : public UIElement {
+class PolycodeScreenEditorMain : public PolycodeEntityEditorMain {
 	public:
 		
 		PolycodeScreenEditorMain(PolycodeEditor *editor);
@@ -364,7 +267,7 @@ class ScreenEntityClipboardData {
 		std::vector<ScreenEntity*> entities;
 };
 
-class PolycodeScreenEditor : public PolycodeEditor {
+class PolycodeScreenEditor : public PolycodeEntityEditor {
 	public:
 		PolycodeScreenEditor();
 		virtual ~PolycodeScreenEditor();
