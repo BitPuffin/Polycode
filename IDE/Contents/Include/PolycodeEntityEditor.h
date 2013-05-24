@@ -136,5 +136,13 @@ class PolycodeEntityEditorMain : public UIElement {
 		void resizePreviewScreen();
 		void handleDroppedFile(OSFileEntry file, Number x, Number y);
 		bool hasSelected(Entity *entity);
+		
+		void deleteEntity(Entity *entity);
+		
+		void applyEditorOnly(Entity *entity);
+		void applyEditorOnlyChildren(Entity *entity);
+		virtual void applyEditorProperties(ScreenEntity *entity);
+
+		
 
 }
